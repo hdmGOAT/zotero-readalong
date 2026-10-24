@@ -1,0 +1,59 @@
+{
+  "name": "zotero-readalong",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Read papers with your coding agent: scratch marks in the Zotero reader that an external agent (e.g. Claude Code) can see, answer, and promote to real annotations.",
+  "config": {
+    "addonName": "Read-Along",
+    "addonID": "readalong@zotero-readalong",
+    "addonRef": "readalong",
+    "addonInstance": "ReadAlong",
+    "prefsPrefix": "extensions.zotero.readalong"
+  },
+  "author": "Hans Matthew E. Del Mundo",
+  "homepage": "https://github.com/hdmGOAT/zotero-readalong#readme",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "start": "zotero-plugin serve",
+    "build": "zotero-plugin build && tsc --noEmit",
+    "lint:check": "prettier --check . && eslint .",
+    "lint:fix": "prettier --write . && eslint . --fix",
+    "release": "zotero-plugin release",
+    "update-deps": "npm update --save"
+  },
+  "dependencies": {
+    "zotero-plugin-toolkit": "^5.1.0-beta.13"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@zotero-plugin/eslint-config": "^0.6.7",
+    "eslint": "^9.39.2",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3",
+    "zotero-plugin-scaffold": "^0.8.2",
+    "zotero-types": "^4.1.0-beta.4"
+  },
+  "prettier": {
+    "printWidth": 80,
+    "tabWidth": 2,
+    "endOfLine": "lf",
+    "overrides": [
+      {
+        "files": [
+          "*.xhtml"
+        ],
+        "options": {
+          "htmlWhitespaceSensitivity": "css"
+        }
+      }
+    ]
+  },
+  "overrides": {
+    "pdfjs-dist": "4.10.38",
+    "epubjs": "0.3.93"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hdmGOAT/zotero-readalong.git"
+  }
+}

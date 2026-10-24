@@ -1,0 +1,1 @@
+pref("agentName", "Claude");

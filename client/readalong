@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""readalong: the agent side of Zotero Read-Along.
+
+Talks to the plugin's endpoints on Zotero's local server. Stdlib only, so any
+agent (or human) with Python can use it. See docs/protocol.md.
+"""
+
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+BASE = os.environ.get("READALONG_URL", "http://127.0.0.1:23119/readalong")
+STATE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "zotero-readalong" / "seq"
+
+
+def call(path, params=None, body=None, timeout=30):
+    url = BASE + path
+    if params:
+        url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+    data = None
+    headers = {}
+    if body is not None:
+        data = json.dumps(body).encode()
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST" if body is not None else "GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            return json.loads(res.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.loads(e.read()).get("error", e.reason)
+        except ValueError:
+            msg = e.reason
+        sys.exit(f"readalong: {e.code} {msg}")
+    except urllib.error.URLError as e:
+        sys.exit(f"readalong: cannot reach Zotero at {BASE} ({e.reason}). Is Zotero running with the plugin installed?")
+
+
+def last_position():
+    """(epoch, seq) of the last mark seen; the plugin resets seq per epoch."""
+    try:
+        state = json.loads(STATE.read_text())
+        return state.get("epoch"), int(state.get("seq", 0))
+    except (OSError, ValueError, AttributeError):
+        return None, 0
+
+
+def save_position(epoch, seq):
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps({"epoch": epoch, "seq": seq}))
+
+
+def show_mark(m):
+    """An agent mark."""
+    item = m.get("item") or {}
+    print(f"── agent mark {m['id']} · {m['kind']} · p.{m['page']} (index {m['pageIndex']}) · {item.get('title', '')}")
+    if m.get("text"):
+        print(f"   text: {m['text']}")
+    if m.get("note"):
+        print(f"   note: {m['note']}")
+    if m.get("imagePath"):
+        print(f"   image: {m['imagePath']}")
+
+
+def show_ask(a):
+    item = a.get("item") or {}
+    regions = a.get("regions") or []
+    parent = a.get("inReplyTo")
+    kind = f"follow-up to {parent['id']}" if parent else "ask"
+    print(f"══ {kind} {a['id']} · {len(regions)} region(s) · {item.get('title', '')}")
+    if parent:
+        print(f"   (earlier) they asked: {parent['prompt']}")
+        if parent.get("take"):
+            print(f"   (earlier) their guess: {parent['take']}")
+        print(f"   (earlier) you replied: {parent.get('reply') or '(no reply yet)'}")
+    print(f"   question: {a['prompt'] or '(none: they want to understand the marked region)'}")
+    if a.get("take"):
+        print(f"   their guess: {a['take']}")
+    for i, r in enumerate(regions, 1):
+        print(f"   [{i}] {r['kind']} · p.{r['page']} (index {r['pageIndex']}) · mark {r['id']}")
+        if r.get("text"):
+            print(f"       text: {r['text']}")
+        if r.get("imagePath"):
+            print(f"       image: {r['imagePath']}")
+    if a.get("reply"):
+        print(f"   reply: {a['reply']}")
+    if item.get("pdfPath"):
+        print(f"   pdf: {item['pdfPath']}  (attachment {item.get('attachmentKey')})")
+
+
+def page_args(a):
+    return {"attachmentKey": a.attachment, "page": a.page, "pageIndex": a.page_index}
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="readalong", description=__doc__.splitlines()[0])
+    ap.add_argument("--json", action="store_true", help="print raw JSON")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("ping", help="check that Zotero and the plugin are up")
+    sub.add_parser("reload", help="dev: reload the plugin from disk")
+    sub.add_parser("context", help="what is open in the active reader tab")
+    sub.add_parser("marks", help="list all current marks")
+
+    w = sub.add_parser("wait", help="block until the user sends new asks")
+    w.add_argument("--timeout", type=int, default=600, help="seconds (max 3600)")
+    w.add_argument("--from-start", action="store_true", help="ignore saved position")
+
+    r = sub.add_parser("reply", help="answer an ask; shown in the reader")
+    r.add_argument("id", help="ask id (or any of its marks)")
+    r.add_argument("text", help="reply text, or - for stdin")
+
+    def with_page(p):
+        p.add_argument("--attachment", help="attachment key (default: active tab)")
+        p.add_argument("--page", help="page label as printed")
+        p.add_argument("--page-index", type=int, help="zero-based page index")
+        return p
+
+    d = with_page(sub.add_parser("draw", help="draw an agent mark on the page"))
+    g = d.add_mutually_exclusive_group(required=True)
+    g.add_argument("--quote", help="exact text to highlight")
+    g.add_argument("--frac", type=float, nargs=4, metavar=("X1", "Y1", "X2", "Y2"),
+                   help="box as page fractions, top-left origin")
+    g.add_argument("--rect", type=float, nargs=4, metavar=("X1", "Y1", "X2", "Y2"),
+                   help="box in PDF points, bottom-left origin")
+    d.add_argument("--note", default="", help="why to look here")
+    d.add_argument("--ask", help="ask id this pointer answers (shows inside that reply)")
+    d.add_argument("--no-nav", action="store_true", help="don't scroll the reader to it")
+
+    with_page(sub.add_parser("snapshot", help="render a page to PNG"))
+    with_page(sub.add_parser("text", help="extract a page's text"))
+
+    pr = sub.add_parser("promote", help="save a mark as a real Zotero annotation")
+    pr.add_argument("id")
+    pr.add_argument("--comment", help="annotation comment (default: the reply/note)")
+    pr.add_argument("--color", help="hex color, e.g. #ffd400")
+
+    ds = sub.add_parser("dismiss", help="remove a mark, an ask's regions, or --all")
+    ds.add_argument("id", nargs="?", help="mark id or ask id")
+    ds.add_argument("--all", action="store_true")
+
+    a = ap.parse_args()
+    out = None
+
+    if a.cmd == "ping":
+        out = call("/ping")
+    elif a.cmd == "reload":
+        out = call("/reload", body={})
+    elif a.cmd == "context":
+        out = call("/context")
+    elif a.cmd == "marks":
+        out = call("/marks")
+        if not a.json:
+            for ask in out["asks"]:
+                show_ask(ask)
+            for m in out["agentMarks"]:
+                show_mark(m)
+            if not out["asks"] and not out["agentMarks"]:
+                print("no marks")
+            return
+    elif a.cmd == "wait":
+        epoch, after = (None, 0) if a.from_start else last_position()
+        out = call("/next", {"epoch": epoch, "after": after, "timeout": a.timeout}, timeout=a.timeout + 30)
+        save_position(out.get("epoch"), out["seq"])
+        if not a.json:
+            for ask in out["asks"]:
+                show_ask(ask)
+            if not out["asks"]:
+                print("no new asks (timed out)")
+                sys.exit(3)
+            return
+    elif a.cmd == "reply":
+        text = sys.stdin.read() if a.text == "-" else a.text
+        out = call("/reply", body={"id": a.id, "text": text.strip()})
+    elif a.cmd == "draw":
+        body = {**page_args(a), "note": a.note, "navigate": not a.no_nav, "askID": a.ask}
+        if a.quote:
+            body["quote"] = a.quote
+        elif a.frac:
+            body["frac"] = a.frac
+        else:
+            body["rect"] = a.rect
+        out = call("/draw", body=body)
+        if not a.json:
+            show_mark(out)
+            return
+    elif a.cmd == "snapshot":
+        out = call("/snapshot", page_args(a))
+    elif a.cmd == "text":
+        out = call("/text", page_args(a))
+        if not a.json:
+            print(out["text"])
+            return
+    elif a.cmd == "promote":
+        out = call("/promote", body={"id": a.id, "comment": a.comment, "color": a.color})
+    elif a.cmd == "dismiss":
+        if not a.id and not a.all:
+            sys.exit("readalong: give a mark id or --all")
+        out = call("/dismiss", body={"all": True} if a.all else {"id": a.id})
+
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

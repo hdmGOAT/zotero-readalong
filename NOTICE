@@ -1,0 +1,24 @@
+Zotero Read-Along
+Copyright (C) 2026 Hans Matthew E. Del Mundo
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See LICENSE for the full text.
+
+Third-party material
+--------------------
+
+zotero-plugin-template
+  https://github.com/windingwind/zotero-plugin-template
+  Copyright (C) windingwind and contributors
+  License: AGPL-3.0-or-later
+  Used for: project scaffold and build configuration (package.json scripts,
+  zotero-plugin.config.ts, tsconfig.json, eslint config, .github workflows),
+  addon/bootstrap.js, and src/utils/ (some files modified).
+  addon/bootstrap.js itself derives from Zotero's "Make It Red" example
+  (https://github.com/zotero/make-it-red).
+
+Build and development dependencies (not redistributed in this repository)
+are listed in package.json with their own licenses, including
+zotero-plugin-toolkit (MIT) and zotero-plugin-scaffold (AGPL-3.0-or-later).
