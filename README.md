@@ -194,6 +194,27 @@ drafts), `server` (HTTP endpoints), `reader` (wiring) with `view`, `interact`
 - The agent only answers while a session is watching.
 - A draft belongs to one PDF; regions can't span papers yet.
 
+## Contributing
+
+Contributions are welcome, and I'm happy to review them: bug reports, fixes,
+support for other agents, EPUB/snapshot support, UI polish, or ideas that
+make reading more active rather than less.
+
+A heads-up on pace: this is a side project, so I won't be very active in
+pushing updates myself. I'll work on it when I have free time or see a clear
+need. Reviews may take a while, but they will happen.
+
+To contribute:
+
+- Open an issue first for anything bigger than a small fix, so we can agree on
+  the approach.
+- Keep pull requests focused, and run `npm run lint:check` and `npm run build`
+  before sending.
+- Changes to agent behavior go in [skill/readalong/SKILL.md](skill/readalong/SKILL.md);
+  protocol changes should update [docs/protocol.md](docs/protocol.md).
+- Keep the spirit of the project in mind: the tool should help the reader do
+  the thinking, not do it for them.
+
 ## License
 
 Copyright © 2026 Hans Matthew E. Del Mundo.
